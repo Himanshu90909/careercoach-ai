@@ -14,32 +14,35 @@ flowchart TD
     NAV --> NEGOTIATE[Salary Negotiation Room]
 
     INTERVIEW --> FORM[st.form: Role, Description, Topics, Context]
-    FORM --> BANK[Gemini Question Bank JSON]
+    FORM --> BANK[Provider Question Bank JSON]
     BANK --> ASSIST[AI Interview Assistant]
     BANK --> PRACTICE[Question Cards and Text Answers]
-    PRACTICE --> EVAL[Gemini Answer Evaluation JSON]
+    PRACTICE --> EVAL[Provider Answer Evaluation JSON]
     EVAL --> RANK[Local Skill Aggregation]
     RANK --> KPI[st.metric, Plotly, st.data_editor]
     BANK --> CODING[External Coding Practice Links]
 
     ROLEFIT --> UPLOAD[Resume + Role Upload]
     UPLOAD --> PARSER[In-Memory PDF/DOCX/TXT Parser]
-    PARSER --> MATCH[Gemini Match and Gap Analysis]
+    PARSER --> MATCH[Provider Match and Gap Analysis]
     MATCH --> TAILOR[Tailored Questions and Feedback]
 
     NEGOTIATE --> SCENARIO[st.form Scenario Configuration]
     SCENARIO --> TRANSCRIPT[Session-State Transcript]
-    TRANSCRIPT --> HR[Gemini HR Role-play]
+    TRANSCRIPT --> HR[Provider HR Role-play]
     HR --> TRANSCRIPT
     TRANSCRIPT --> SCORE[Local Weighted Negotiation Score]
     SCORE --> REPORT[Charts and Markdown Report]
 
-    GEMINI[Gemini API] -. fallback .-> DEMO[Deterministic Demo Engine]
+    PROVIDER[AI Provider Adapter]
+    GEMINI[Gemini API] --> PROVIDER
+    GROK[Grok API] --> PROVIDER
+    PROVIDER -. fallback .-> DEMO[Deterministic Demo Engine]
 ```
 
 ## Data flow and state design
 
-The interview setup is submitted through `st.form`, which prevents partial widget changes from triggering unnecessary model calls. On submission, the role, description, selected topics, and optional candidate context are stored in `st.session_state`. The generated question bank is also stored there, so navigation and widget reruns do not erase the active practice plan.
+The interview setup is submitted through `st.form`, which prevents partial widget changes from triggering unnecessary model calls. On submission, the role, description, selected topics, and optional candidate context are stored in `st.session_state`. The generated question bank is also stored there, so navigation and widget reruns do not erase the active practice plan. The sidebar provides an explicit **Start a fresh session** action that clears negotiation, assistant, question-bank, and evaluation state before rerunning the app.
 
 Each answer evaluation is stored by question index in `answer_evaluations`. The application aggregates the returned `skill_scores` locally and calculates the demonstrated-skill ranking with Pandas. Plotly renders the ranking visually, while `st.data_editor` presents the same DataFrame as a rubric-friendly interactive table.
 
@@ -47,7 +50,7 @@ The role-fit workflow uses `st.file_uploader`. Uploaded PDF, DOCX, TXT, Markdown
 
 ## AI integration strategy
 
-`modules/prompts.py` contains explicit system-oriented prompt builders. Dynamic role, description, topic, candidate, transcript, question, and answer context is injected with f-strings. Structured tasks request JSON with known keys, and `AIEngine._parse_json` defensively extracts JSON when a model wraps it in Markdown. Every model boundary has a deterministic fallback so the demo remains usable when `GEMINI_API_KEY` is absent or an API request fails.
+`modules/prompts.py` contains explicit system-oriented prompt builders. Dynamic role, description, topic, candidate, transcript, question, and answer context is injected with f-strings. Structured tasks request JSON with known keys, and `AIEngine._parse_json` defensively extracts JSON when a model wraps it in Markdown. `AIEngine` routes the same task-specific prompts to Gemini through the Google SDK or to Grok through the OpenAI-compatible xAI chat-completions endpoint. Every model boundary has a deterministic fallback so the demo remains usable when no provider key is configured or an API request fails.
 
 The AI engine exposes separate methods for HR role-play, negotiation evaluation, resume matching, tailored role-fit coaching, question-bank generation, assistant chat, and answer evaluation. This separation prevents a generic chatbot prompt from being reused for unrelated tasks.
 
@@ -57,7 +60,7 @@ The AI engine exposes separate methods for HR role-play, negotiation evaluation,
 |---|---|
 | `app.py` | Streamlit presentation layer, navigation, forms, uploads, state transitions, charts, tables, and downloads. |
 | `modules/prompts.py` | Dynamic prompts for negotiation, role matching, question generation, assistant chat, and answer evaluation. |
-| `modules/ai_engine.py` | Gemini client, structured parsing, task-specific AI methods, and deterministic fallbacks. |
+| `modules/ai_engine.py` | Gemini/Grok provider adapter, structured parsing, task-specific AI methods, and deterministic fallbacks. |
 | `modules/document_parser.py` | In-memory extraction for PDF, DOCX, TXT, Markdown, and CSV uploads. |
 | `modules/scoring.py` | Deterministic normalization, weighted scoring, best/worst dimensions, and deltas. |
 | `modules/report_generator.py` | Downloadable Markdown coaching report generation. |
@@ -65,8 +68,8 @@ The AI engine exposes separate methods for HR role-play, negotiation evaluation,
 
 ## Security and reliability
 
-The Gemini key is read from `GEMINI_API_KEY` or Streamlit secrets and is never embedded in source code. Uploaded candidate documents are processed in memory and are not committed to the repository. API failures are caught at the AI boundary, while local score aggregation remains reproducible. The application is educational and does not provide financial, legal, employment, or hiring decisions.
+Provider keys are read from the active sidebar session, environment variables, or Streamlit secrets and are never embedded in source code. Uploaded candidate documents are processed in memory and are not committed to the repository. API failures are caught at the AI boundary, while local score aggregation remains reproducible. The application is educational and does not provide financial, legal, employment, or hiring decisions.
 
 ## Deployment
 
-The application is compatible with Streamlit Community Cloud. The main file is `app.py`; all Python dependencies are declared in `requirements.txt`, and no local system packages are required. Add `GEMINI_API_KEY` through the deployment Secrets panel to activate live Gemini responses. Without the key, the deterministic demo engine provides a complete presentation path for the capstone evaluation.
+The application is compatible with Streamlit Community Cloud. The main file is `app.py`; all Python dependencies are declared in `requirements.txt`, and no local system packages are required. Add `GEMINI_API_KEY` or `GROK_API_KEY` and the corresponding model setting through the deployment Secrets panel to activate live responses. Without either key, the deterministic demo engine provides a complete presentation path for the capstone evaluation.
