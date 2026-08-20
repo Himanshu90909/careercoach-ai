@@ -1,33 +1,72 @@
-# Technical Design Document
+# CareerCoach AI Technical Architecture
 
 ## System purpose
 
-CareerCoach AI provides a guided negotiation practice experience. The application collects a structured scenario, maintains the conversation in memory, asks Gemini to role-play an HR manager, and evaluates the completed transcript.
+CareerCoach AI is a modular Streamlit application for general interview preparation, role-fit analysis, and salary-negotiation rehearsal. The same interface supports a student preparing for an internship, a fresher preparing for placement, or an experienced candidate preparing for a technical, behavioral, or compensation conversation.
 
-## Data flow
+## System flow
 
-1. The user submits the scenario form. The form validates the compensation boundaries before storing the scenario in Streamlit session state.
-2. The user submits a text response or records audio through `st.audio_input`. Text is the current analysis input; the voice path is intentionally visible and provides a graceful fallback when transcription is not configured.
-3. The prompt builder injects only the scenario context and recent transcript into the HR prompt.
-4. The AI engine calls Gemini when `GEMINI_API_KEY` is available. If it is absent or a request fails, deterministic demo responses keep the product usable.
-5. At the end of the session, the evaluation prompt requests a strict JSON scorecard. The parser extracts JSON defensively and falls back to a local evaluation object if parsing fails.
-6. The scoring module normalises each dimension and calculates the weighted overall score locally, ensuring that dashboard totals are reproducible.
-7. Plotly charts and the Markdown report use the same scorecard and transcript stored in session state.
+```mermaid
+flowchart TD
+    UI[Streamlit Dashboard] --> NAV[Session-State Navigation]
+    NAV --> INTERVIEW[Universal Interview Workspace]
+    NAV --> ROLEFIT[Resume-to-Role Practice]
+    NAV --> NEGOTIATE[Salary Negotiation Room]
+
+    INTERVIEW --> FORM[st.form: Role, Description, Topics, Context]
+    FORM --> BANK[Gemini Question Bank JSON]
+    BANK --> ASSIST[AI Interview Assistant]
+    BANK --> PRACTICE[Question Cards and Text Answers]
+    PRACTICE --> EVAL[Gemini Answer Evaluation JSON]
+    EVAL --> RANK[Local Skill Aggregation]
+    RANK --> KPI[st.metric, Plotly, st.data_editor]
+    BANK --> CODING[External Coding Practice Links]
+
+    ROLEFIT --> UPLOAD[Resume + Role Upload]
+    UPLOAD --> PARSER[In-Memory PDF/DOCX/TXT Parser]
+    PARSER --> MATCH[Gemini Match and Gap Analysis]
+    MATCH --> TAILOR[Tailored Questions and Feedback]
+
+    NEGOTIATE --> SCENARIO[st.form Scenario Configuration]
+    SCENARIO --> TRANSCRIPT[Session-State Transcript]
+    TRANSCRIPT --> HR[Gemini HR Role-play]
+    HR --> TRANSCRIPT
+    TRANSCRIPT --> SCORE[Local Weighted Negotiation Score]
+    SCORE --> REPORT[Charts and Markdown Report]
+
+    GEMINI[Gemini API] -. fallback .-> DEMO[Deterministic Demo Engine]
+```
+
+## Data flow and state design
+
+The interview setup is submitted through `st.form`, which prevents partial widget changes from triggering unnecessary model calls. On submission, the role, description, selected topics, and optional candidate context are stored in `st.session_state`. The generated question bank is also stored there, so navigation and widget reruns do not erase the active practice plan.
+
+Each answer evaluation is stored by question index in `answer_evaluations`. The application aggregates the returned `skill_scores` locally and calculates the demonstrated-skill ranking with Pandas. Plotly renders the ranking visually, while `st.data_editor` presents the same DataFrame as a rubric-friendly interactive table.
+
+The role-fit workflow uses `st.file_uploader`. Uploaded PDF, DOCX, TXT, Markdown, or CSV content is extracted in memory and compacted before it reaches the AI prompt. The application does not persist the source documents. The salary-negotiation workflow uses a separate transcript list and evaluation object, allowing the original capstone scenario to remain independently demonstrable.
+
+## AI integration strategy
+
+`modules/prompts.py` contains explicit system-oriented prompt builders. Dynamic role, description, topic, candidate, transcript, question, and answer context is injected with f-strings. Structured tasks request JSON with known keys, and `AIEngine._parse_json` defensively extracts JSON when a model wraps it in Markdown. Every model boundary has a deterministic fallback so the demo remains usable when `GEMINI_API_KEY` is absent or an API request fails.
+
+The AI engine exposes separate methods for HR role-play, negotiation evaluation, resume matching, tailored role-fit coaching, question-bank generation, assistant chat, and answer evaluation. This separation prevents a generic chatbot prompt from being reused for unrelated tasks.
 
 ## Module responsibilities
 
 | Module | Responsibility |
 |---|---|
-| `app.py` | Presentation layer, navigation, forms, state transitions, charts, and downloads |
-| `modules/prompts.py` | Prompt construction and dynamic scenario context |
-| `modules/ai_engine.py` | Gemini client, model calls, JSON parsing, and demo fallback behaviour |
-| `modules/scoring.py` | Score clamping, weighted scoring, best/worst dimensions, and deltas |
-| `modules/report_generator.py` | Human-readable Markdown report generation |
+| `app.py` | Streamlit presentation layer, navigation, forms, uploads, state transitions, charts, tables, and downloads. |
+| `modules/prompts.py` | Dynamic prompts for negotiation, role matching, question generation, assistant chat, and answer evaluation. |
+| `modules/ai_engine.py` | Gemini client, structured parsing, task-specific AI methods, and deterministic fallbacks. |
+| `modules/document_parser.py` | In-memory extraction for PDF, DOCX, TXT, Markdown, and CSV uploads. |
+| `modules/scoring.py` | Deterministic normalization, weighted scoring, best/worst dimensions, and deltas. |
+| `modules/report_generator.py` | Downloadable Markdown coaching report generation. |
+| `tests/` | Automated checks for scoring, document parsing, and demo role matching. |
 
 ## Security and reliability
 
-The Gemini key is read from an environment variable and is never embedded in source code. Streamlit secrets are recommended for deployment. API failures are caught at the AI boundary, while score calculations remain local and deterministic. The app does not persist personal data beyond the active browser session.
+The Gemini key is read from `GEMINI_API_KEY` or Streamlit secrets and is never embedded in source code. Uploaded candidate documents are processed in memory and are not committed to the repository. API failures are caught at the AI boundary, while local score aggregation remains reproducible. The application is educational and does not provide financial, legal, employment, or hiring decisions.
 
-## Known limitation
+## Deployment
 
-The interface includes a microphone recorder, but production-grade speech-to-text is not bundled in this first version because it would add another external service and deployment credential. The application presents a clear text fallback. A future iteration can add Gemini audio transcription or a dedicated speech-to-text provider behind the same `AIEngine` interface.
+The application is compatible with Streamlit Community Cloud. The main file is `app.py`; all Python dependencies are declared in `requirements.txt`, and no local system packages are required. Add `GEMINI_API_KEY` through the deployment Secrets panel to activate live Gemini responses. Without the key, the deterministic demo engine provides a complete presentation path for the capstone evaluation.
