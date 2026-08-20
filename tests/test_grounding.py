@@ -14,6 +14,11 @@ def test_question_prompt_contains_source_description_and_grounding_rules():
     assert "requirement_basis" in prompt
 
 
+def test_grok_uses_current_default_model():
+    engine = AIEngine("grok", "test-key")
+    assert engine.model == "grok-4.6"
+
+
 def test_grok_error_does_not_expose_api_key():
     secret = "grok-test-secret"
     engine = AIEngine("grok", secret)
