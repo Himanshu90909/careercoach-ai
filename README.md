@@ -6,7 +6,7 @@
 
 **GitHub:** [Himanshu90909/careercoach-ai](https://github.com/Himanshu90909/careercoach-ai)
 
-CareerCoach AI is a general interview-preparation workspace built with Streamlit and Gemini. It accepts any role or internship description as text, can compare a resume with the role, generates topic-wise interview questions, provides an AI interview assistant, evaluates written answers, ranks demonstrated skills, and links candidates to external coding-practice platforms.
+CareerCoach AI is an open-source, provider-neutral interview-preparation workspace built with Streamlit. It supports Gemini, Grok, and a deterministic demo engine. It accepts any role or internship description as text, can compare a resume with the role, generates topic-wise interview questions, provides an AI interview assistant, evaluates written answers, ranks demonstrated skills, and links candidates to external coding-practice platforms.
 
 ## Why this project exists
 
@@ -14,7 +14,7 @@ Students often know their technical skills but have not rehearsed how to communi
 
 ## Features
 
-The application provides three preparation paths: a salary negotiation room, a universal **Interview workspace** with text-based role setup, and a **Role-fit practice** page for resume and internship-description uploads. The interview workspace generates behavioral, technical, project, role-fit, teamwork, learning, coding, SQL, system-design, and communication questions; supports an AI assistant chat; evaluates written answers; visualizes demonstrated skill ranks; and recommends LeetCode, HackerRank, CodeSignal, and GeeksforGeeks practice. Deterministic fallbacks keep the workflow usable without an API key.
+The application provides three preparation paths: a salary negotiation room, a universal **Interview workspace** with text-based role setup, and a **Role-fit practice** page for resume and internship-description uploads. The sidebar includes an explicit session reset/start control and an AI provider selector. The interview workspace generates behavioral, technical, project, role-fit, teamwork, learning, coding, SQL, system-design, and communication questions; supports an AI assistant chat; evaluates written answers; visualizes demonstrated skill ranks; and recommends LeetCode, HackerRank, CodeSignal, and GeeksforGeeks practice. Deterministic fallbacks keep the workflow usable without an API key.
 
 ## Architecture
 
@@ -32,7 +32,10 @@ flowchart TD
     ANSWERS --> RANK[Skill Ranking]
     BANK --> CODING[External Coding Practice Links]
     INPUT --> PROMPT[Prompt Builder]
-    PROMPT --> GEMINI[Gemini API]
+    PROMPT --> PROVIDER[Provider Adapter]
+    PROVIDER --> GEMINI[Gemini API]
+    PROVIDER --> GROK[Grok API]
+    PROVIDER --> DEMO[Deterministic Demo Engine]
     GEMINI --> TRANSCRIPT[Conversation History]
     TRANSCRIPT --> EVAL[Structured Evaluation]
     EVAL --> SCORE[Local Weighted Scoring]
@@ -50,13 +53,16 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app starts in **demo mode** if `GEMINI_API_KEY` is absent. To enable live Gemini responses, create `.streamlit/secrets.toml` locally:
+The app starts in **Demo mode** by default, so the session can always be started without credentials. From the sidebar, choose **Gemini** or **Grok** and enter a key for the active session, or configure the key in `.streamlit/secrets.toml`:
 
 ```toml
-GEMINI_API_KEY = "your-key-here"
+GEMINI_API_KEY = "your-gemini-key"
+GEMINI_MODEL = "gemini-2.0-flash"
+GROK_API_KEY = "your-grok-key"
+GROK_MODEL = "grok-3-mini"
 ```
 
-Never commit that file. The included `.gitignore` excludes it.
+Never commit secrets. The included `.gitignore` excludes `.streamlit/secrets.toml`. Grok uses the OpenAI-compatible xAI endpoint configured by `GROK_BASE_URL`, which defaults to `https://api.x.ai/v1`.
 
 ## Deploy to Streamlit Community Cloud
 
@@ -73,7 +79,7 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | Path | Responsibility |
 |---|---|
 | `app.py` | Streamlit UI, navigation, session state, charts, and interaction flow |
-| `modules/ai_engine.py` | Gemini client, question generation, assistant chat, answer scoring, role matching, coaching, and demo fallbacks |
+| `modules/ai_engine.py` | Gemini/Grok provider adapter, question generation, assistant chat, answer scoring, role matching, coaching, and demo fallbacks |
 | `modules/prompts.py` | Dynamic negotiation, role-matching, question-bank, assistant, and answer-evaluation prompts |
 | `modules/document_parser.py` | In-memory PDF, DOCX, TXT, Markdown, and CSV text extraction |
 | `modules/scoring.py` | Deterministic score normalisation and weighted scoring |
@@ -87,10 +93,10 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | Requirement | Implementation |
 |---|---|
 | Streamlit forms and session state | Scenario setup uses `st.form`; active conversation is preserved in `st.session_state` |
-| Gemini integration | Role-specific HR, evaluation, role-match, question generation, assistant, and answer-coaching prompts |
+| Gemini/Grok integration | Provider-neutral role-specific HR, evaluation, role-match, question generation, assistant, and answer-coaching prompts |
 | Multimodality | Typed role descriptions, resume/job-document uploads, and `st.audio_input` voice practice with a text fallback |
 | Data visualisation | KPI cards, radar profile, horizontal scorecards, answer scores, and demonstrated-skill ranking |
-| Deployment | Streamlit Community Cloud-compatible requirements |
+| Deployment | Streamlit Community Cloud-compatible requirements and user-configurable Gemini/Grok secrets |
 | Open-source branding | Terminal-style title, architecture diagram, setup instructions, and documented modules |
 
 ## MirAI capstone evaluation mapping
