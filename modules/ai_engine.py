@@ -25,7 +25,7 @@ class AIEngine:
         self.provider = provider.lower().strip() or "demo"
         self.api_key = api_key.strip()
         self.last_error = ""
-        self.model = model.strip() or ({"gemini": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"), "grok": os.getenv("GROK_MODEL", "grok-3-mini")}.get(self.provider, "demo"))
+        self.model = model.strip() or ({"gemini": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"), "grok": os.getenv("GROK_MODEL", "grok-4.6")}.get(self.provider, "demo"))
         self.client = genai.Client(api_key=self.api_key) if genai and self.provider == "gemini" and self.api_key else None
 
     @property
