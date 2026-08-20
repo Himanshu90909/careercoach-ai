@@ -167,8 +167,8 @@ def coding_practice_links(focus: list[str]) -> None:
         "CodeSignal": ("Assessment-style coding practice", "https://app.codesignal.com/"),
         "GeeksforGeeks": ("Topic explanations and problems", "https://www.geeksforgeeks.org/explore"),
     }
-    rows = [{"Platform": name, "Best for": purpose, "Open practice": f"[Start practice]({url})"} for name, (purpose, url) in links.items()]
-    st.markdown(pd.DataFrame(rows).to_markdown(index=False), unsafe_allow_html=False)
+    rows = [{"Platform": name, "Best for": purpose, "Open practice": url} for name, (purpose, url) in links.items()]
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, column_config={"Open practice": st.column_config.LinkColumn("Open practice")})
     if focus:
         st.info("Suggested focus from the AI agent: " + ", ".join(focus))
 
