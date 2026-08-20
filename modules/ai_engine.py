@@ -94,14 +94,51 @@ class AIEngine:
                 return "**Score: 4/10**\n\nYour answer is a useful start, but it needs a concrete example. Add the situation, your action, and a measurable result.\n\n**Follow-up:** What changed because of your work?"
             return "**Score: 7/10**\n\nYou gave enough detail to start a strong answer. Make the result more measurable and connect the example directly to the internship requirement.\n\n**Follow-up:** What did you learn and what would you improve next time?"
 
+    @staticmethod
+    def _source_requirements(description: str) -> list[str]:
+        """Extract compact requirement anchors without inventing role facts."""
+        raw_lines = [re.sub(r"^[-*•\d.)\s]+", "", line).strip() for line in description.splitlines()]
+        candidates = [line for line in raw_lines if len(line.split()) >= 2]
+        if not candidates:
+            sentences = re.split(r"[.!?;]+", description)
+            candidates = [sentence.strip() for sentence in sentences if len(sentence.split()) >= 2]
+        anchors: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            cleaned = re.sub(r"\s+", " ", candidate).strip(" .,:;-")
+            key = cleaned.lower()
+            if cleaned and key not in seen:
+                anchors.append(cleaned[:180])
+                seen.add(key)
+        return anchors[:12]
+
+    @staticmethod
+    def _basis_is_in_source(basis: str, description: str) -> bool:
+        source = re.sub(r"\s+", " ", description.lower()).strip()
+        basis_text = re.sub(r"\s+", " ", basis.lower()).strip()
+        if len(basis_text) >= 8 and basis_text in source:
+            return True
+        basis_terms = {term for term in re.findall(r"[a-z0-9+#.]{4,}", basis_text) if term not in {"role", "source", "requirement", "practice", "description"}}
+        source_terms = set(re.findall(r"[a-z0-9+#.]{4,}", source))
+        return bool(basis_terms) and len(basis_terms & source_terms) >= max(1, min(3, len(basis_terms) // 2))
+
     def generate_interview_bank(self, role: str, description: str, topics: list[str], candidate_context: str = "") -> dict[str, Any]:
         try:
             raw = self._generate(interview_question_prompt(role, description, topics, candidate_context), "You are an expert interview curriculum designer. The role description is the source of truth; reject generic content.")
             parsed = self._parse_json(raw)
             questions = parsed.get("questions", []) if isinstance(parsed, dict) else []
-            grounded = [question for question in questions if isinstance(question, dict) and question.get("question") and question.get("requirement_basis")]
-            if parsed and len(grounded) >= max(3, min(10, len(questions))):
+            grounded = [
+                question for question in questions
+                if isinstance(question, dict)
+                and question.get("question")
+                and question.get("requirement_basis")
+                and self._basis_is_in_source(str(question["requirement_basis"]), description)
+            ]
+            minimum = max(3, min(10, len(questions)))
+            if parsed and len(grounded) >= minimum:
                 parsed["questions"] = grounded
+                parsed["requirements_extracted"] = [str(item) for item in parsed.get("requirements_extracted", []) if self._basis_is_in_source(str(item), description)]
+                parsed["skill_rubric"] = [str(item) for item in parsed.get("skill_rubric", []) if self._basis_is_in_source(str(item), description)]
                 return parsed
         except Exception as exc:
             self._record_error(exc)
@@ -169,21 +206,36 @@ class AIEngine:
     @staticmethod
     def demo_interview_bank(role: str, topics: list[str], description: str = "") -> dict[str, Any]:
         selected = topics or ["Behavioral", "Technical", "Projects"]
-        base = [
-            ("Behavioral", "Tell me about a time you faced a difficult problem and how you solved it.", ["Situation", "Your action", "Result"]),
-            ("Projects", "Walk me through your most relevant project and your individual contribution.", ["Architecture or approach", "Trade-off", "Outcome"]),
-            ("Technical", "Explain a technical concept from this role as if you were teaching a beginner.", ["Correct definition", "Example", "Practical use"]),
-            ("Role fit", "Why do you want this role, and what would you contribute in your first 30 days?", ["Role connection", "Strength", "First action"]),
-            ("Behavioral", "Tell me about feedback that changed how you work.", ["Feedback", "Change", "Evidence"]),
-            ("Technical", "How would you debug a solution that works locally but fails in production?", ["Reproduce", "Observe", "Fix and prevent"]),
-            ("Projects", "What would you improve if you had one more week on your strongest project?", ["Limitation", "Prioritization", "Expected impact"]),
-            ("Teamwork", "Describe a disagreement with a teammate and how you handled it.", ["Shared goal", "Communication", "Resolution"]),
-            ("Learning", "How do you learn a new tool or technology under a deadline?", ["Plan", "Practice", "Validation"]),
-            ("Closing", "What questions would you ask the interviewer before accepting the role?", ["Mentorship", "Success criteria", "Team workflow"]),
+        requirements = AIEngine._source_requirements(description)
+        if not requirements:
+            requirements = [f"The description for {role} was not specific enough to extract a requirement"]
+        templates = [
+            ("Technical", "How would you demonstrate or apply this requirement in a project?"),
+            ("Projects", "Describe evidence from your work that would help you meet this requirement."),
+            ("Role fit", "What would you clarify with the interviewer before claiming you can meet this requirement?"),
+            ("Behavioral", "Tell me about a time you handled a situation related to this requirement."),
+            ("Learning", "How would you learn this requirement if it is currently a gap?"),
+            ("Communication", "Explain your approach to this requirement to a non-technical teammate."),
         ]
-        source_anchor = (description or f"the stated {role} role").strip()[:240]
-        questions = [{"topic": topic, "difficulty": "Intermediate", "question": question, "requirement_basis": f"Practice anchor: {source_anchor}", "ideal_points": points} for topic, question, points in base if topic in selected or not selected]
-        return {"role_summary": f"Demo practice bank for {role}, anchored to the supplied role description.", "requirements_extracted": [source_anchor], "questions": questions, "skill_rubric": ["Communication", "Problem solving", "Technical reasoning", "Role fit", "Learning agility"], "coding_focus": ["Arrays and strings", "Hash maps", "SQL queries", "Debugging"]}
+        questions: list[dict[str, Any]] = []
+        for index, requirement in enumerate(requirements):
+            topic, template = templates[index % len(templates)]
+            if topic not in selected and selected:
+                topic = selected[index % len(selected)]
+            questions.append({
+                "topic": topic,
+                "difficulty": "Intermediate",
+                "question": f"The internship description states: ‘{requirement}’. {template}",
+                "requirement_basis": requirement,
+                "ideal_points": ["Quote the requirement accurately", "Use evidence or state the gap honestly", "Explain the next action or measurable result"],
+            })
+        return {
+            "role_summary": f"Local fallback for {role}: every question is built from the supplied description; no generic requirement was added.",
+            "requirements_extracted": requirements,
+            "questions": questions,
+            "skill_rubric": requirements[:8],
+            "coding_focus": [item for item in requirements if any(token in item.lower() for token in ["code", "python", "sql", "java", "javascript", "algorithm", "data structure"])][:5],
+        }
 
     @staticmethod
     def demo_hr_response(scenario: dict, round_number: int) -> str:
