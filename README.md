@@ -57,7 +57,7 @@ The app opens in the **Interview workspace** and defaults to Grok. If `GROK_API_
 
 ```toml
 GROK_API_KEY = "your-grok-key"
-GROK_MODEL = "grok-3-mini"
+GROK_MODEL = "grok-4.6"
 GROK_BASE_URL = "https://api.x.ai/v1"
 ```
 

@@ -372,7 +372,7 @@ def provider_controls() -> AIEngine:
     provider_key = {"Demo mode": "demo", "Grok": "grok"}[provider]
     default_key = secret_or_env("GROK_API_KEY")
     api_key = st.sidebar.text_input("Grok API key (optional)", value=default_key, type="password", help="Stored only in this active Streamlit session unless you configure it in Secrets.") if provider_key == "grok" else ""
-    default_model = secret_or_env("GROK_MODEL")
+    default_model = secret_or_env("GROK_MODEL") or "grok-4.6"
     model = st.sidebar.text_input("Model (optional)", value=default_model, placeholder="Use the provider default") if provider_key != "demo" else "demo"
     st.session_state.provider = provider_key
     st.session_state.provider_model = model
