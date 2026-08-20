@@ -7,7 +7,7 @@ import os
 import re
 from typing import Any
 
-from .prompts import evaluation_prompt, hr_system_prompt
+from .prompts import evaluation_prompt, hr_system_prompt, role_match_prompt, tailored_response_prompt
 from .scoring import DIMENSIONS
 
 try:
@@ -44,6 +44,25 @@ class AIEngine:
         except Exception:
             return self.demo_hr_response(scenario, len(transcript))
 
+    def match_resume_to_role(self, resume_text: str, job_text: str) -> dict[str, Any]:
+        try:
+            raw = self._generate(role_match_prompt(resume_text, job_text), "You are a precise internship recruiting analyst.")
+            parsed = self._parse_json(raw)
+            if parsed and isinstance(parsed.get("questions"), list):
+                return parsed
+        except Exception:
+            pass
+        return self.demo_role_match(resume_text, job_text)
+
+    def coach_answer(self, context: dict[str, Any], question: str, answer: str) -> str:
+        try:
+            return self._generate(tailored_response_prompt(context, question, answer), "You are a supportive but rigorous interview coach.")
+        except Exception:
+            words = len(answer.split())
+            if words < 20:
+                return "**Score: 4/10**\n\nYour answer is a useful start, but it needs a concrete example. Add the situation, your action, and a measurable result.\n\n**Follow-up:** What changed because of your work?"
+            return "**Score: 7/10**\n\nYou gave enough detail to start a strong answer. Make the result more measurable and connect the example directly to the internship requirement.\n\n**Follow-up:** What did you learn and what would you improve next time?"
+
     def evaluate(self, scenario: dict, transcript: list[dict[str, str]]) -> dict[str, Any]:
         transcript_text = "\n".join(f"{item['speaker']}: {item['text']}" for item in transcript)
         try:
@@ -67,6 +86,22 @@ class AIEngine:
                 return json.loads(match.group(0))
             except json.JSONDecodeError:
                 return None
+
+    @staticmethod
+    def demo_role_match(resume_text: str, job_text: str) -> dict[str, Any]:
+        resume_lower = resume_text.lower()
+        keywords = ["python", "sql", "machine learning", "javascript", "react", "streamlit", "communication", "excel", "data analysis", "git"]
+        matched = [word.title() for word in keywords if word in resume_lower]
+        missing = [word.title() for word in keywords if word in job_text.lower() and word not in resume_lower]
+        questions = [
+            {"question": "Walk me through a project from your resume that is most relevant to this internship.", "why_it_matters": "Tests evidence and relevance.", "ideal_points": ["Context", "Your contribution", "Result"]},
+            {"question": "Which requirement in this internship description would you need to learn fastest, and how would you approach it?", "why_it_matters": "Tests self-awareness and learning agility.", "ideal_points": ["Honest gap", "Specific learning plan", "Time frame"]},
+            {"question": "Tell me about a time you solved a difficult technical or team problem.", "why_it_matters": "Tests problem-solving and collaboration.", "ideal_points": ["Situation", "Action", "Outcome"]},
+            {"question": "Why are you interested in this internship and what would you contribute in the first 30 days?", "why_it_matters": "Tests motivation and preparation.", "ideal_points": ["Role connection", "Relevant strength", "Practical first step"]},
+            {"question": "How do you respond when feedback shows that your first solution is not good enough?", "why_it_matters": "Tests coachability.", "ideal_points": ["Specific example", "Adaptation", "Improved result"]},
+            {"question": "What questions would you ask the team before accepting this internship?", "why_it_matters": "Tests curiosity and judgment.", "ideal_points": ["Mentorship", "Success measures", "Team workflow"]},
+        ]
+        return {"match_score": min(95, 45 + len(matched) * 7 - len(missing) * 3), "role_summary": "A tailored internship practice plan based on the uploaded documents.", "matched_skills": matched or ["Transferable project experience"], "missing_skills": missing or ["Validate the role-specific tools from the description"], "evidence": ["Demo mode uses only the uploaded text and does not invent resume achievements."], "questions": questions, "study_plan": ["Prepare two STAR stories from your resume.", "Review the top missing skill and build a small example.", "Practise explaining one project in 60 seconds.", "Prepare three questions for the interviewer."]}
 
     @staticmethod
     def demo_hr_response(scenario: dict, round_number: int) -> str:

@@ -33,6 +33,48 @@ Rules:
 """
 
 
+def role_match_prompt(resume_text: str, job_text: str) -> str:
+    return f"""Compare this candidate resume with the internship description.
+
+Resume:
+{resume_text}
+
+Internship description:
+{job_text}
+
+Return only valid JSON with this shape:
+{{
+  "match_score": 0,
+  "role_summary": "one sentence",
+  "matched_skills": ["skill"],
+  "missing_skills": ["skill"],
+  "evidence": ["resume evidence connected to a requirement"],
+  "questions": [
+    {{"question": "role-specific interview question", "why_it_matters": "short reason", "ideal_points": ["point"]}}
+  ],
+  "study_plan": ["action"]
+}}
+Use only evidence present in the resume. Generate 6 to 10 questions, prioritizing the internship requirements and the candidate's gaps."""
+
+
+def tailored_response_prompt(context: dict, question: str, answer: str) -> str:
+    return f"""You are a practical internship interview coach.
+
+Role summary: {context.get('role_summary', '')}
+Matched skills: {', '.join(context.get('matched_skills', []))}
+Missing skills: {', '.join(context.get('missing_skills', []))}
+Question: {question}
+Candidate answer: {answer}
+
+Give concise feedback in this structure:
+1. Score out of 10.
+2. What was strong.
+3. What was missing or unclear.
+4. A stronger STAR-style answer outline.
+5. One follow-up question.
+Keep it supportive, specific, and under 180 words."""
+
+
 def evaluation_prompt(scenario: dict, transcript: str) -> str:
     return f"""Evaluate the following salary negotiation practice session.
 
