@@ -7,6 +7,8 @@ import os
 import re
 from typing import Any
 
+import requests
+
 from .prompts import (answer_evaluation_prompt, evaluation_prompt, hr_system_prompt, interview_assistant_prompt, interview_question_prompt, role_match_prompt, tailored_response_prompt)
 from .scoring import DIMENSIONS
 
@@ -17,24 +19,45 @@ except ImportError:  # pragma: no cover - handled by requirements.txt
 
 
 class AIEngine:
-    def __init__(self, model: str = "gemini-2.0-flash") -> None:
-        self.model = model
-        self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.client = genai.Client(api_key=self.api_key) if genai and self.api_key else None
+    """Provider-neutral AI boundary for Gemini, Grok, and deterministic demo mode."""
+
+    def __init__(self, provider: str = "demo", api_key: str = "", model: str = "") -> None:
+        self.provider = provider.lower().strip() or "demo"
+        self.api_key = api_key.strip()
+        self.model = model.strip() or ({"gemini": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"), "grok": os.getenv("GROK_MODEL", "grok-3-mini")}.get(self.provider, "demo"))
+        self.client = genai.Client(api_key=self.api_key) if genai and self.provider == "gemini" and self.api_key else None
 
     @property
     def available(self) -> bool:
-        return self.client is not None
+        return (self.client is not None) if self.provider == "gemini" else bool(self.provider == "grok" and self.api_key)
+
+    @property
+    def label(self) -> str:
+        return {"gemini": "Gemini", "grok": "Grok", "demo": "Demo mode"}.get(self.provider, "Demo mode")
 
     def _generate(self, prompt: str, system_instruction: str = "") -> str:
-        if not self.client:
-            raise RuntimeError("GEMINI_API_KEY is not configured")
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config={"system_instruction": system_instruction, "temperature": 0.7},
-        )
-        return (response.text or "").strip()
+        if self.provider == "gemini":
+            if not self.client:
+                raise RuntimeError("GEMINI_API_KEY is not configured")
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config={"system_instruction": system_instruction, "temperature": 0.7},
+            )
+            return (response.text or "").strip()
+        if self.provider == "grok":
+            if not self.api_key:
+                raise RuntimeError("GROK_API_KEY is not configured")
+            response = requests.post(
+                os.getenv("GROK_BASE_URL", "https://api.x.ai/v1") + "/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                json={"model": self.model, "messages": [{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}], "temperature": 0.7},
+                timeout=60,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            return (payload.get("choices", [{}])[0].get("message", {}).get("content", "") or "").strip()
+        raise RuntimeError("Demo mode uses deterministic local fallbacks")
 
     def hr_response(self, scenario: dict, transcript: list[dict[str, str]]) -> str:
         context = "\n".join(f"{item['speaker']}: {item['text']}" for item in transcript[-8:])
