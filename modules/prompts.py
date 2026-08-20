@@ -76,29 +76,44 @@ Keep it supportive, specific, and under 180 words."""
 
 
 def interview_question_prompt(role: str, description: str, topics: list[str], candidate_context: str) -> str:
-    return f"""Create a comprehensive interview practice bank for any person preparing for this role.
+    return f"""Create a role-specific interview practice bank. The supplied role description is the single source of truth; do not substitute a generic interview template.
 
-Role: {role}
-Role or internship description: {description}
-Topics: {', '.join(topics)}
-Candidate context: {candidate_context or 'Not provided'}
+ROLE TITLE:
+{role}
+
+SOURCE ROLE / INTERNSHIP DESCRIPTION:
+{description}
+
+SELECTED TOPICS:
+{', '.join(topics)}
+
+CANDIDATE CONTEXT (optional; do not invent beyond this text):
+{candidate_context or 'Not provided'}
+
+Grounding rules:
+- Extract concrete responsibilities, tools, skills, deliverables, and keywords from the source description.
+- At least 70% of questions must directly reference a requirement, responsibility, tool, or deliverable from the source description.
+- Include a `requirement_basis` field for every question containing the exact requirement or a faithful short quote it tests.
+- If the source description is vague, say so in `role_summary` and ask clarifying questions instead of inventing company facts.
+- Do not claim the candidate has a skill unless it appears in the candidate context.
 
 Return only valid JSON:
 {{
-  "role_summary": "one sentence",
+  "role_summary": "one sentence grounded in the source description",
+  "requirements_extracted": ["concrete requirement from source"],
   "questions": [
-    {{"topic": "topic", "difficulty": "Beginner|Intermediate|Advanced", "question": "question", "ideal_points": ["point"]}}
+    {{"topic": "topic", "difficulty": "Beginner|Intermediate|Advanced", "question": "question", "requirement_basis": "exact source requirement", "ideal_points": ["point"]}}
   ],
-  "skill_rubric": ["skill to evaluate"],
-  "coding_focus": ["coding topic"]
+  "skill_rubric": ["skill from the source description"],
+  "coding_focus": ["coding topic only if supported by the source description"]
 }}
-Generate at least 10 questions across the selected topics. Include technical, behavioral, project, and role-specific questions when relevant. Do not invent facts about the candidate."""
+Generate at least 10 questions across the selected topics, prioritizing the source requirements. Do not generate generic questions when a source-specific question is possible."""
 
 
 def interview_assistant_prompt(role: str, context: str, history: str, user_message: str) -> str:
-    return f"""You are an AI interview assistant for the role: {role}.
+    return f"""You are a role-grounded AI interview assistant for: {role}.
 
-Candidate and role context:
+SOURCE-OF-TRUTH ROLE CONTEXT:
 {context}
 
 Conversation:
@@ -107,11 +122,21 @@ Conversation:
 Candidate message:
 {user_message}
 
-Answer helpfully. You may explain concepts, ask a mock interview question, provide hints, critique an answer, or suggest a study step. Keep the answer concise and end with one actionable next step."""
+Rules:
+- Answer using the supplied role description and candidate context, not general assumptions.
+- When giving a question, name the exact role requirement it tests.
+- When explaining a concept, connect it to a tool, responsibility, or deliverable in the source description.
+- Never invent company facts, technologies, responsibilities, or candidate experience. If the description does not contain the answer, say that clearly and ask the candidate for clarification.
+- Keep the answer concise and end with one actionable next step."""
 
 
-def answer_evaluation_prompt(role: str, question: str, answer: str, rubric: list[str]) -> str:
-    return f"""Evaluate this interview answer for the role {role}.
+def answer_evaluation_prompt(role: str, context: str, question: str, answer: str, rubric: list[str]) -> str:
+    return f"""Evaluate this interview answer against the supplied role context, not against a generic interview rubric.
+
+Role: {role}
+Source role context:
+{context}
+
 Question: {question}
 Answer: {answer}
 Skills to assess: {', '.join(rubric)}
@@ -119,13 +144,14 @@ Skills to assess: {', '.join(rubric)}
 Return only valid JSON:
 {{
   "score": 0,
-  "skill_scores": {{"skill": 0}},
+  "requirement_addressed": "how the answer addresses the role requirement, or what is missing",
+  "skill_scores": {"skill": 0},
   "strengths": ["strength"],
   "improvements": ["improvement"],
   "model_answer_outline": ["STAR or technical reasoning point"],
   "follow_up": "one follow-up question"
 }}
-Use a 0-10 score and assess only evidence in the answer."""
+Use a 0-10 score and assess only evidence in the answer. Explicitly identify whether the answer addresses the source requirement being tested."""
 
 
 def evaluation_prompt(scenario: dict, transcript: str) -> str:

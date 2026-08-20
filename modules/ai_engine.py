@@ -88,13 +88,16 @@ class AIEngine:
 
     def generate_interview_bank(self, role: str, description: str, topics: list[str], candidate_context: str = "") -> dict[str, Any]:
         try:
-            raw = self._generate(interview_question_prompt(role, description, topics, candidate_context), "You are an expert interview curriculum designer.")
+            raw = self._generate(interview_question_prompt(role, description, topics, candidate_context), "You are an expert interview curriculum designer. The role description is the source of truth; reject generic content.")
             parsed = self._parse_json(raw)
-            if parsed and isinstance(parsed.get("questions"), list):
+            questions = parsed.get("questions", []) if isinstance(parsed, dict) else []
+            grounded = [question for question in questions if isinstance(question, dict) and question.get("question") and question.get("requirement_basis")]
+            if parsed and len(grounded) >= max(3, min(10, len(questions))):
+                parsed["questions"] = grounded
                 return parsed
         except Exception:
             pass
-        return self.demo_interview_bank(role, topics)
+        return self.demo_interview_bank(role, topics, description)
 
     def interview_assistant(self, role: str, context: str, history: list[dict[str, str]], user_message: str) -> str:
         history_text = "\n".join(f"{item['speaker']}: {item['text']}" for item in history[-8:])
@@ -103,16 +106,16 @@ class AIEngine:
         except Exception:
             return f"For **{role}**, focus on a specific example and explain your own contribution. A good structure is **Situation → Task → Action → Result**.\n\nNext step: connect your answer to one requirement from the role description."
 
-    def evaluate_interview_answer(self, role: str, question: str, answer: str, rubric: list[str]) -> dict[str, Any]:
+    def evaluate_interview_answer(self, role: str, context: str, question: str, answer: str, rubric: list[str]) -> dict[str, Any]:
         try:
-            raw = self._generate(answer_evaluation_prompt(role, question, answer, rubric), "You are a fair structured interview evaluator.")
+            raw = self._generate(answer_evaluation_prompt(role, context, question, answer, rubric), "You are a fair structured interview evaluator. Ground every judgment in the supplied role context.")
             parsed = self._parse_json(raw)
             if parsed and "score" in parsed:
                 return parsed
         except Exception:
             pass
         score = min(10, 4 + (2 if len(answer.split()) >= 30 else 0) + (2 if any(token in answer.lower() for token in ["because", "result", "built", "reduced", "learned"]) else 0))
-        return {"score": score, "skill_scores": {skill: score for skill in rubric[:5]}, "strengths": ["You attempted the question directly."], "improvements": ["Add a concrete example and measurable result.", "Connect the answer to the role requirement."], "model_answer_outline": ["State the situation and task.", "Explain your specific action.", "Close with the result and learning."], "follow_up": "What was the measurable outcome?"}
+        return {"score": score, "requirement_addressed": "Demo mode could not call the provider; connect your answer to the requirement named in the question.", "skill_scores": {skill: score for skill in rubric[:5]}, "strengths": ["You attempted the question directly."], "improvements": ["Add a concrete example and measurable result.", "Connect the answer to the exact role requirement."], "model_answer_outline": ["State the situation and task.", "Explain your specific action.", "Close with the result and learning."], "follow_up": "Which exact responsibility from the role description does this example prove?"}
 
     def evaluate(self, scenario: dict, transcript: list[dict[str, str]]) -> dict[str, Any]:
         transcript_text = "\n".join(f"{item['speaker']}: {item['text']}" for item in transcript)
@@ -155,7 +158,7 @@ class AIEngine:
         return {"match_score": min(95, 45 + len(matched) * 7 - len(missing) * 3), "role_summary": "A tailored internship practice plan based on the uploaded documents.", "matched_skills": matched or ["Transferable project experience"], "missing_skills": missing or ["Validate the role-specific tools from the description"], "evidence": ["Demo mode uses only the uploaded text and does not invent resume achievements."], "questions": questions, "study_plan": ["Prepare two STAR stories from your resume.", "Review the top missing skill and build a small example.", "Practise explaining one project in 60 seconds.", "Prepare three questions for the interviewer."]}
 
     @staticmethod
-    def demo_interview_bank(role: str, topics: list[str]) -> dict[str, Any]:
+    def demo_interview_bank(role: str, topics: list[str], description: str = "") -> dict[str, Any]:
         selected = topics or ["Behavioral", "Technical", "Projects"]
         base = [
             ("Behavioral", "Tell me about a time you faced a difficult problem and how you solved it.", ["Situation", "Your action", "Result"]),
@@ -169,8 +172,9 @@ class AIEngine:
             ("Learning", "How do you learn a new tool or technology under a deadline?", ["Plan", "Practice", "Validation"]),
             ("Closing", "What questions would you ask the interviewer before accepting the role?", ["Mentorship", "Success criteria", "Team workflow"]),
         ]
-        questions = [{"topic": topic, "difficulty": "Intermediate", "question": question, "ideal_points": points} for topic, question, points in base if topic in selected or not selected]
-        return {"role_summary": f"General interview practice bank for {role}.", "questions": questions, "skill_rubric": ["Communication", "Problem solving", "Technical reasoning", "Role fit", "Learning agility"], "coding_focus": ["Arrays and strings", "Hash maps", "SQL queries", "Debugging"]}
+        source_anchor = (description or f"the stated {role} role").strip()[:240]
+        questions = [{"topic": topic, "difficulty": "Intermediate", "question": question, "requirement_basis": f"Practice anchor: {source_anchor}", "ideal_points": points} for topic, question, points in base if topic in selected or not selected]
+        return {"role_summary": f"Demo practice bank for {role}, anchored to the supplied role description.", "requirements_extracted": [source_anchor], "questions": questions, "skill_rubric": ["Communication", "Problem solving", "Technical reasoning", "Role fit", "Learning agility"], "coding_focus": ["Arrays and strings", "Hash maps", "SQL queries", "Debugging"]}
 
     @staticmethod
     def demo_hr_response(scenario: dict, round_number: int) -> str:
