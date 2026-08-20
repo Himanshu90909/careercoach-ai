@@ -2,7 +2,7 @@
 
 ## System purpose
 
-CareerCoach AI is a modular Streamlit application for general interview preparation, role-fit analysis, and salary-negotiation rehearsal. The same interface supports a student preparing for an internship, a fresher preparing for placement, or an experienced candidate preparing for a technical, behavioral, or compensation conversation.
+CareerCoach AI is a modular Streamlit application centered on the xAI Grok API for general interview preparation, role-fit analysis, and salary-negotiation rehearsal. Demo mode is retained only as a deterministic local fallback when no Grok key is available. The same interface supports a student preparing for an internship, a fresher preparing for placement, or an experienced candidate preparing for a technical, behavioral, or compensation conversation.
 
 ## System flow
 
@@ -34,10 +34,8 @@ flowchart TD
     TRANSCRIPT --> SCORE[Local Weighted Negotiation Score]
     SCORE --> REPORT[Charts and Markdown Report]
 
-    PROVIDER[AI Provider Adapter]
-    GEMINI[Gemini API] --> PROVIDER
-    GROK[Grok API] --> PROVIDER
-    PROVIDER -. fallback .-> DEMO[Deterministic Demo Engine]
+    GROK[Grok API] --> PROVIDER[ xAI Grok Provider Adapter ]
+    PROVIDER -. no key or request failure .-> DEMO[Deterministic Demo Engine]
 ```
 
 ## Data flow and state design
@@ -50,7 +48,7 @@ The role-fit workflow uses `st.file_uploader`. Uploaded PDF, DOCX, TXT, Markdown
 
 ## AI integration strategy
 
-`modules/prompts.py` contains explicit system-oriented prompt builders. Dynamic role, description, topic, candidate, transcript, question, and answer context is injected with f-strings. Structured tasks request JSON with known keys, and `AIEngine._parse_json` defensively extracts JSON when a model wraps it in Markdown. `AIEngine` routes the same task-specific prompts to Gemini through the Google SDK or to Grok through the OpenAI-compatible xAI chat-completions endpoint. Every model boundary has a deterministic fallback so the demo remains usable when no provider key is configured or an API request fails.
+`modules/prompts.py` contains explicit system-oriented prompt builders. Dynamic role, description, topic, candidate, transcript, question, and answer context is injected with f-strings. Structured tasks request JSON with known keys, and `AIEngine._parse_json` defensively extracts JSON when a model wraps it in Markdown. The Grok adapter uses the OpenAI-compatible xAI chat-completions endpoint. Question generation requires a `requirement_basis` for each question; invalid or generic provider output is rejected. Provider failures are recorded in a redacted diagnostic field and the local fallback is clearly labeled.
 
 The AI engine exposes separate methods for HR role-play, negotiation evaluation, resume matching, tailored role-fit coaching, question-bank generation, assistant chat, and answer evaluation. This separation prevents a generic chatbot prompt from being reused for unrelated tasks.
 
@@ -68,8 +66,8 @@ The AI engine exposes separate methods for HR role-play, negotiation evaluation,
 
 ## Security and reliability
 
-Provider keys are read from the active sidebar session, environment variables, or Streamlit secrets and are never embedded in source code. Uploaded candidate documents are processed in memory and are not committed to the repository. API failures are caught at the AI boundary, while local score aggregation remains reproducible. The application is educational and does not provide financial, legal, employment, or hiring decisions.
+The Grok key is read from the active sidebar session, `GROK_API_KEY`, or Streamlit secrets and is never embedded in source code. Error diagnostics redact the configured key before display. Uploaded candidate documents are processed in memory and are not committed to the repository. API failures are caught at the AI boundary, while local score aggregation remains reproducible. The application is educational and does not provide financial, legal, employment, or hiring decisions.
 
 ## Deployment
 
-The application is compatible with Streamlit Community Cloud. The main file is `app.py`; all Python dependencies are declared in `requirements.txt`, and no local system packages are required. Add `GEMINI_API_KEY` or `GROK_API_KEY` and the corresponding model setting through the deployment Secrets panel to activate live responses. Without either key, the deterministic demo engine provides a complete presentation path for the capstone evaluation.
+The application is compatible with Streamlit Community Cloud. The main file is `app.py`; all Python dependencies are declared in `requirements.txt`, and no local system packages are required. Add `GROK_API_KEY`, `GROK_MODEL`, and optionally `GROK_BASE_URL` through the deployment Secrets panel to activate live responses. Without a key, the deterministic demo engine provides a complete presentation path for the capstone evaluation.
