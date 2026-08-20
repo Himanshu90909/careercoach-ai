@@ -47,6 +47,9 @@ def init_state() -> None:
         "interview_bank": None,
         "interview_role": "",
         "interview_context": "",
+        "interview_description": "",
+        "interview_candidate_context": "",
+        "interview_topics": [],
         "assistant_history": [],
         "answer_evaluations": {},
         "provider": "demo",
@@ -190,8 +193,13 @@ def interview_workspace(engine: AIEngine) -> None:
             with st.spinner("Building your personalized interview question bank..."):
                 st.session_state.interview_bank = engine.generate_interview_bank(role.strip(), compact_text(description), topics, compact_text(candidate_context))
             st.session_state.interview_role = role.strip()
-            camera_note = " A visual practice snapshot was provided." if camera_snapshot is not None else ""
-            st.session_state.interview_context = compact_text(description + " " + candidate_context + camera_note)
+            st.session_state.interview_description = compact_text(description)
+            st.session_state.interview_candidate_context = compact_text(candidate_context)
+            st.session_state.interview_topics = topics
+            camera_note = "A visual practice snapshot was provided." if camera_snapshot is not None else "No visual snapshot provided."
+            st.session_state.interview_context = compact_text(
+                f"ROLE TITLE: {role.strip()}\nSOURCE ROLE DESCRIPTION: {description}\nCANDIDATE CONTEXT: {candidate_context or 'Not provided'}\nVISUAL NOTE: {camera_note}"
+            )
             st.session_state.assistant_history = []
             st.session_state.answer_evaluations = {}
             st.rerun()
@@ -230,6 +238,8 @@ def interview_workspace(engine: AIEngine) -> None:
             with st.expander(label, expanded=index == 0):
                 if isinstance(item, dict):
                     st.caption(f"Difficulty: {item.get('difficulty', 'Intermediate')} · Ideal points: {', '.join(item.get('ideal_points', []))}")
+                    if item.get("requirement_basis"):
+                        st.info(f"Grounded in role requirement: {item['requirement_basis']}")
                 answer_key = f"universal_answer_{index}"
                 answer = st.text_area("Your answer", key=answer_key, height=120, placeholder="Answer with a real example. For behavioral questions use STAR; for technical questions explain assumptions, approach, and trade-offs.")
                 if st.button("Evaluate answer", key=f"evaluate_universal_{index}"):
@@ -237,10 +247,11 @@ def interview_workspace(engine: AIEngine) -> None:
                         st.warning("Write an answer first.")
                     else:
                         with st.spinner("Scoring your answer..."):
-                            st.session_state.answer_evaluations[index] = engine.evaluate_interview_answer(st.session_state.interview_role, question, answer, bank.get("skill_rubric", []))
+                            st.session_state.answer_evaluations[index] = engine.evaluate_interview_answer(st.session_state.interview_role, st.session_state.interview_context, question, answer, bank.get("skill_rubric", []))
                 result = st.session_state.answer_evaluations.get(index)
                 if result:
                     st.metric("Answer score", f"{float(result.get('score', 0)):.1f}/10")
+                    st.write("**Requirement coverage:** " + result.get("requirement_addressed", "Connect your answer to the requirement named in the question."))
                     st.write("**Strengths:** " + " ".join(result.get("strengths", [])))
                     st.write("**Improve:** " + " ".join(result.get("improvements", [])))
                     st.write("**Model outline:** " + " → ".join(result.get("model_answer_outline", [])))
