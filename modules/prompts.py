@@ -75,6 +75,59 @@ Give concise feedback in this structure:
 Keep it supportive, specific, and under 180 words."""
 
 
+def interview_question_prompt(role: str, description: str, topics: list[str], candidate_context: str) -> str:
+    return f"""Create a comprehensive interview practice bank for any person preparing for this role.
+
+Role: {role}
+Role or internship description: {description}
+Topics: {', '.join(topics)}
+Candidate context: {candidate_context or 'Not provided'}
+
+Return only valid JSON:
+{{
+  "role_summary": "one sentence",
+  "questions": [
+    {{"topic": "topic", "difficulty": "Beginner|Intermediate|Advanced", "question": "question", "ideal_points": ["point"]}}
+  ],
+  "skill_rubric": ["skill to evaluate"],
+  "coding_focus": ["coding topic"]
+}}
+Generate at least 10 questions across the selected topics. Include technical, behavioral, project, and role-specific questions when relevant. Do not invent facts about the candidate."""
+
+
+def interview_assistant_prompt(role: str, context: str, history: str, user_message: str) -> str:
+    return f"""You are an AI interview assistant for the role: {role}.
+
+Candidate and role context:
+{context}
+
+Conversation:
+{history}
+
+Candidate message:
+{user_message}
+
+Answer helpfully. You may explain concepts, ask a mock interview question, provide hints, critique an answer, or suggest a study step. Keep the answer concise and end with one actionable next step."""
+
+
+def answer_evaluation_prompt(role: str, question: str, answer: str, rubric: list[str]) -> str:
+    return f"""Evaluate this interview answer for the role {role}.
+Question: {question}
+Answer: {answer}
+Skills to assess: {', '.join(rubric)}
+
+Return only valid JSON:
+{{
+  "score": 0,
+  "skill_scores": {{"skill": 0}},
+  "strengths": ["strength"],
+  "improvements": ["improvement"],
+  "model_answer_outline": ["STAR or technical reasoning point"],
+  "follow_up": "one follow-up question"
+}}
+Use a 0-10 score and assess only evidence in the answer."""
+
+
 def evaluation_prompt(scenario: dict, transcript: str) -> str:
     return f"""Evaluate the following salary negotiation practice session.
 

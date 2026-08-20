@@ -7,7 +7,7 @@ import os
 import re
 from typing import Any
 
-from .prompts import evaluation_prompt, hr_system_prompt, role_match_prompt, tailored_response_prompt
+from .prompts import (answer_evaluation_prompt, evaluation_prompt, hr_system_prompt, interview_assistant_prompt, interview_question_prompt, role_match_prompt, tailored_response_prompt)
 from .scoring import DIMENSIONS
 
 try:
@@ -63,6 +63,34 @@ class AIEngine:
                 return "**Score: 4/10**\n\nYour answer is a useful start, but it needs a concrete example. Add the situation, your action, and a measurable result.\n\n**Follow-up:** What changed because of your work?"
             return "**Score: 7/10**\n\nYou gave enough detail to start a strong answer. Make the result more measurable and connect the example directly to the internship requirement.\n\n**Follow-up:** What did you learn and what would you improve next time?"
 
+    def generate_interview_bank(self, role: str, description: str, topics: list[str], candidate_context: str = "") -> dict[str, Any]:
+        try:
+            raw = self._generate(interview_question_prompt(role, description, topics, candidate_context), "You are an expert interview curriculum designer.")
+            parsed = self._parse_json(raw)
+            if parsed and isinstance(parsed.get("questions"), list):
+                return parsed
+        except Exception:
+            pass
+        return self.demo_interview_bank(role, topics)
+
+    def interview_assistant(self, role: str, context: str, history: list[dict[str, str]], user_message: str) -> str:
+        history_text = "\n".join(f"{item['speaker']}: {item['text']}" for item in history[-8:])
+        try:
+            return self._generate(interview_assistant_prompt(role, context, history_text, user_message), "You are a patient and rigorous interview assistant.")
+        except Exception:
+            return f"For **{role}**, focus on a specific example and explain your own contribution. A good structure is **Situation → Task → Action → Result**.\n\nNext step: connect your answer to one requirement from the role description."
+
+    def evaluate_interview_answer(self, role: str, question: str, answer: str, rubric: list[str]) -> dict[str, Any]:
+        try:
+            raw = self._generate(answer_evaluation_prompt(role, question, answer, rubric), "You are a fair structured interview evaluator.")
+            parsed = self._parse_json(raw)
+            if parsed and "score" in parsed:
+                return parsed
+        except Exception:
+            pass
+        score = min(10, 4 + (2 if len(answer.split()) >= 30 else 0) + (2 if any(token in answer.lower() for token in ["because", "result", "built", "reduced", "learned"]) else 0))
+        return {"score": score, "skill_scores": {skill: score for skill in rubric[:5]}, "strengths": ["You attempted the question directly."], "improvements": ["Add a concrete example and measurable result.", "Connect the answer to the role requirement."], "model_answer_outline": ["State the situation and task.", "Explain your specific action.", "Close with the result and learning."], "follow_up": "What was the measurable outcome?"}
+
     def evaluate(self, scenario: dict, transcript: list[dict[str, str]]) -> dict[str, Any]:
         transcript_text = "\n".join(f"{item['speaker']}: {item['text']}" for item in transcript)
         try:
@@ -102,6 +130,24 @@ class AIEngine:
             {"question": "What questions would you ask the team before accepting this internship?", "why_it_matters": "Tests curiosity and judgment.", "ideal_points": ["Mentorship", "Success measures", "Team workflow"]},
         ]
         return {"match_score": min(95, 45 + len(matched) * 7 - len(missing) * 3), "role_summary": "A tailored internship practice plan based on the uploaded documents.", "matched_skills": matched or ["Transferable project experience"], "missing_skills": missing or ["Validate the role-specific tools from the description"], "evidence": ["Demo mode uses only the uploaded text and does not invent resume achievements."], "questions": questions, "study_plan": ["Prepare two STAR stories from your resume.", "Review the top missing skill and build a small example.", "Practise explaining one project in 60 seconds.", "Prepare three questions for the interviewer."]}
+
+    @staticmethod
+    def demo_interview_bank(role: str, topics: list[str]) -> dict[str, Any]:
+        selected = topics or ["Behavioral", "Technical", "Projects"]
+        base = [
+            ("Behavioral", "Tell me about a time you faced a difficult problem and how you solved it.", ["Situation", "Your action", "Result"]),
+            ("Projects", "Walk me through your most relevant project and your individual contribution.", ["Architecture or approach", "Trade-off", "Outcome"]),
+            ("Technical", "Explain a technical concept from this role as if you were teaching a beginner.", ["Correct definition", "Example", "Practical use"]),
+            ("Role fit", "Why do you want this role, and what would you contribute in your first 30 days?", ["Role connection", "Strength", "First action"]),
+            ("Behavioral", "Tell me about feedback that changed how you work.", ["Feedback", "Change", "Evidence"]),
+            ("Technical", "How would you debug a solution that works locally but fails in production?", ["Reproduce", "Observe", "Fix and prevent"]),
+            ("Projects", "What would you improve if you had one more week on your strongest project?", ["Limitation", "Prioritization", "Expected impact"]),
+            ("Teamwork", "Describe a disagreement with a teammate and how you handled it.", ["Shared goal", "Communication", "Resolution"]),
+            ("Learning", "How do you learn a new tool or technology under a deadline?", ["Plan", "Practice", "Validation"]),
+            ("Closing", "What questions would you ask the interviewer before accepting the role?", ["Mentorship", "Success criteria", "Team workflow"]),
+        ]
+        questions = [{"topic": topic, "difficulty": "Intermediate", "question": question, "ideal_points": points} for topic, question, points in base if topic in selected or not selected]
+        return {"role_summary": f"General interview practice bank for {role}.", "questions": questions, "skill_rubric": ["Communication", "Problem solving", "Technical reasoning", "Role fit", "Learning agility"], "coding_focus": ["Arrays and strings", "Hash maps", "SQL queries", "Debugging"]}
 
     @staticmethod
     def demo_hr_response(scenario: dict, round_number: int) -> str:
