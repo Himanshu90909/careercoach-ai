@@ -39,7 +39,7 @@ def init_state() -> None:
         "round_scores": [],
         "last_ai_response": "",
         "evaluation": None,
-        "page": "Practice room",
+        "page": "Interview workspace",
         "match_context": None,
         "match_resume_name": "",
         "match_job_name": "",
@@ -57,11 +57,19 @@ def init_state() -> None:
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+    st.session_state.setdefault("provider_choice", "Grok")
 
 
 def reset_session() -> None:
-    for key in ["scenario", "transcript", "round_scores", "last_ai_response", "evaluation"]:
-        st.session_state[key] = None if key in ["scenario", "evaluation"] else ([] if key in ["transcript", "round_scores"] else "")
+    for key in ["scenario", "transcript", "round_scores", "last_ai_response", "evaluation", "interview_bank", "interview_role", "interview_context", "interview_description", "interview_candidate_context", "interview_topics", "assistant_history", "answer_evaluations", "match_context", "practice_feedback"]:
+        if key in ["scenario", "evaluation", "interview_bank", "match_context"]:
+            st.session_state[key] = None
+        elif key in ["transcript", "round_scores", "interview_topics", "assistant_history"]:
+            st.session_state[key] = []
+        elif key in ["answer_evaluations", "practice_feedback"]:
+            st.session_state[key] = {}
+        else:
+            st.session_state[key] = ""
 
 
 def scenario_form() -> None:
@@ -360,14 +368,15 @@ def provider_controls() -> AIEngine:
             return os.getenv(name, "").strip()
 
     st.sidebar.markdown("**AI provider**")
-    provider = st.sidebar.selectbox("Choose engine", ["Demo mode", "Gemini", "Grok"], key="provider_choice")
-    provider_key = {"Demo mode": "demo", "Gemini": "gemini", "Grok": "grok"}[provider]
-    default_key = secret_or_env("GEMINI_API_KEY" if provider_key == "gemini" else "GROK_API_KEY")
-    api_key = st.sidebar.text_input(f"{provider} API key (optional)", value=default_key, type="password", help="Stored only in this active Streamlit session unless you configure it in Secrets.") if provider_key != "demo" else ""
-    default_model = secret_or_env("GEMINI_MODEL" if provider_key == "gemini" else "GROK_MODEL")
+    provider = st.sidebar.selectbox("Choose engine", ["Grok", "Demo mode"], key="provider_choice")
+    provider_key = {"Demo mode": "demo", "Grok": "grok"}[provider]
+    default_key = secret_or_env("GROK_API_KEY")
+    api_key = st.sidebar.text_input("Grok API key (optional)", value=default_key, type="password", help="Stored only in this active Streamlit session unless you configure it in Secrets.") if provider_key == "grok" else ""
+    default_model = secret_or_env("GROK_MODEL")
     model = st.sidebar.text_input("Model (optional)", value=default_model, placeholder="Use the provider default") if provider_key != "demo" else "demo"
     st.session_state.provider = provider_key
     st.session_state.provider_model = model
+
     engine = AIEngine(provider_key, api_key, model)
     if engine.available:
         st.sidebar.success(f"{engine.label} connected")
@@ -389,14 +398,16 @@ def main() -> None:
         st.divider()
         st.markdown("**Engine status**")
         st.write(f"Provider: **{engine.label}**")
-        st.caption("Use Gemini or Grok with your own key, or keep Demo mode for a fully local presentation.")
+        st.caption("Grok is the live provider. Demo mode is available only as a local fallback when no key is configured.")
+        if getattr(engine, "last_error", ""):
+            st.error(f"Grok request issue: {engine.last_error}")
         if st.button("Start a fresh session", use_container_width=True):
             reset_session()
             st.session_state.interview_bank = None
             st.session_state.assistant_history = []
             st.session_state.answer_evaluations = {}
             st.rerun()
-    st.markdown('<div class="hero"><div class="kicker">// internship readiness lab</div><h1>CareerCoach AI</h1><p>Practise the conversation before the conversation. Negotiate with a demanding virtual HR manager, then turn your performance into a measurable coaching plan.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero"><div class="kicker">// grok-grounded interview lab</div><h1>CareerCoach AI</h1><p>Paste the role description, connect Grok, and practise against the actual requirements—not a generic interview script.</p></div>', unsafe_allow_html=True)
     st.write("")
     if st.session_state.page == "Practice room":
         practice_room(engine)

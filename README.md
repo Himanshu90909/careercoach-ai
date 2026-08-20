@@ -6,7 +6,7 @@
 
 **GitHub:** [Himanshu90909/careercoach-ai](https://github.com/Himanshu90909/careercoach-ai)
 
-CareerCoach AI is an open-source, provider-neutral interview-preparation workspace built with Streamlit. It supports Gemini, Grok, and a deterministic demo engine. It accepts any role or internship description as text, can compare a resume with the role, generates topic-wise interview questions, provides an AI interview assistant, evaluates written answers, ranks demonstrated skills, and links candidates to external coding-practice platforms.
+CareerCoach AI is an open-source, Grok-grounded interview-preparation workspace built with Streamlit. It uses the xAI Grok API for live role-specific coaching and provides a deterministic local demo mode when no key is configured. It accepts any role or internship description as text, can compare a resume with the role, generates requirement-grounded interview questions, provides an AI interview assistant, evaluates written answers, ranks demonstrated skills, and links candidates to external coding-practice platforms.
 
 ## Why this project exists
 
@@ -53,16 +53,15 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app starts in **Demo mode** by default, so the session can always be started without credentials. From the sidebar, choose **Gemini** or **Grok** and enter a key for the active session, or configure the key in `.streamlit/secrets.toml`:
+The app opens in the **Interview workspace** and defaults to Grok. If `GROK_API_KEY` is absent, the sidebar clearly shows the issue and Demo mode remains available. Configure Grok locally through `.streamlit/secrets.toml`:
 
 ```toml
-GEMINI_API_KEY = "your-gemini-key"
-GEMINI_MODEL = "gemini-2.0-flash"
 GROK_API_KEY = "your-grok-key"
 GROK_MODEL = "grok-3-mini"
+GROK_BASE_URL = "https://api.x.ai/v1"
 ```
 
-Never commit secrets. The included `.gitignore` excludes `.streamlit/secrets.toml`. Grok uses the OpenAI-compatible xAI endpoint configured by `GROK_BASE_URL`, which defaults to `https://api.x.ai/v1`.
+Never commit secrets. The included `.gitignore` excludes `.streamlit/secrets.toml`. The Grok adapter uses the OpenAI-compatible xAI `/chat/completions` endpoint. The sidebar also accepts a temporary session key, but deployment Secrets are recommended.
 
 ## Deploy to Streamlit Community Cloud
 
@@ -93,10 +92,10 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | Requirement | Implementation |
 |---|---|
 | Streamlit forms and session state | Scenario setup uses `st.form`; active conversation is preserved in `st.session_state` |
-| Gemini/Grok integration | Provider-neutral role-specific HR, evaluation, role-match, question generation, assistant, and answer-coaching prompts |
+| Grok integration | Role-grounded HR, evaluation, role-match, question generation, assistant, and answer-coaching prompts routed through xAI Grok |
 | Multimodality | Typed role descriptions, resume/job-document uploads, and `st.audio_input` voice practice with a text fallback |
 | Data visualisation | KPI cards, radar profile, horizontal scorecards, answer scores, and demonstrated-skill ranking |
-| Deployment | Streamlit Community Cloud-compatible requirements and user-configurable Gemini/Grok secrets |
+| Deployment | Streamlit Community Cloud-compatible requirements and secure user-configurable Grok secrets |
 | Open-source branding | Terminal-style title, architecture diagram, setup instructions, and documented modules |
 
 ## MirAI capstone evaluation mapping
