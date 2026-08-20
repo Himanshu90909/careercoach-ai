@@ -44,6 +44,11 @@ def init_state() -> None:
         "match_resume_name": "",
         "match_job_name": "",
         "practice_feedback": {},
+        "interview_bank": None,
+        "interview_role": "",
+        "interview_context": "",
+        "assistant_history": [],
+        "answer_evaluations": {},
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -151,6 +156,105 @@ def role_fit_practice(engine: AIEngine) -> None:
             st.write(f"• {item}")
 
 
+def coding_practice_links(focus: list[str]) -> None:
+    st.markdown("#### Coding practice platforms")
+    st.caption("Use the generated focus areas to continue practice on an external coding platform.")
+    links = {
+        "LeetCode": ("Algorithms, data structures, SQL", "https://leetcode.com/problemset/"),
+        "HackerRank": ("Interview preparation kits and SQL", "https://www.hackerrank.com/interview/preparation-kits"),
+        "CodeSignal": ("Assessment-style coding practice", "https://app.codesignal.com/"),
+        "GeeksforGeeks": ("Topic explanations and problems", "https://www.geeksforgeeks.org/explore"),
+    }
+    rows = [{"Platform": name, "Best for": purpose, "Open practice": f"[Start practice]({url})"} for name, (purpose, url) in links.items()]
+    st.markdown(pd.DataFrame(rows).to_markdown(index=False), unsafe_allow_html=False)
+    if focus:
+        st.info("Suggested focus from the AI agent: " + ", ".join(focus))
+
+
+def interview_workspace(engine: AIEngine) -> None:
+    st.subheader("Universal interview practice")
+    st.caption("Type any role or internship description. The AI assistant will generate questions, coach answers, and rank the skills you demonstrate.")
+    with st.form("interview_setup_form"):
+        role = st.text_input("Role or interview target", value=st.session_state.interview_role or "Software Engineering Intern")
+        description = st.text_area("Role / internship description", placeholder="Paste the job description, required skills, responsibilities, or simply describe the interview you want to practise.", height=150)
+        topics = st.multiselect("Topics to practise", ["Behavioral", "Technical", "Projects", "Role fit", "Teamwork", "Learning", "Coding", "SQL", "System design", "Communication"], default=["Behavioral", "Technical", "Projects", "Role fit"])
+        candidate_context = st.text_area("Optional candidate context", placeholder="Add your experience, projects, resume summary, or strengths. This helps tailor the questions.", height=100)
+        generate = st.form_submit_button("Generate my interview practice plan", type="primary", use_container_width=True)
+    if generate:
+        if not role.strip() or not description.strip():
+            st.error("Please enter both a role and a role or internship description.")
+        else:
+            with st.spinner("Building your personalized interview question bank..."):
+                st.session_state.interview_bank = engine.generate_interview_bank(role.strip(), compact_text(description), topics, compact_text(candidate_context))
+            st.session_state.interview_role = role.strip()
+            st.session_state.interview_context = compact_text(description + " " + candidate_context)
+            st.session_state.assistant_history = []
+            st.session_state.answer_evaluations = {}
+            st.rerun()
+
+    bank = st.session_state.interview_bank
+    if not bank:
+        st.info("Start by typing the role and the internship description above.")
+        return
+    st.divider()
+    metric_a, metric_b, metric_c = st.columns(3)
+    metric_a.metric("Questions generated", len(bank.get("questions", [])))
+    metric_b.metric("Skills tracked", len(bank.get("skill_rubric", [])))
+    metric_c.metric("Interview target", st.session_state.interview_role)
+    st.write(bank.get("role_summary", "Your interview plan is ready."))
+    assistant_col, practice_col = st.columns([0.8, 1.2])
+    with assistant_col:
+        st.markdown("#### AI interview assistant")
+        for item in st.session_state.assistant_history:
+            with st.chat_message("user" if item["speaker"] == "Candidate" else "assistant"):
+                st.write(item["text"])
+        with st.form("assistant_form", clear_on_submit=True):
+            user_message = st.text_area("Ask for an explanation, hint, mock question, or study step", height=100)
+            ask = st.form_submit_button("Ask assistant", type="primary", use_container_width=True)
+        if ask and user_message.strip():
+            st.session_state.assistant_history.append({"speaker": "Candidate", "text": user_message.strip()})
+            with st.spinner("Assistant is thinking..."):
+                answer = engine.interview_assistant(st.session_state.interview_role, st.session_state.interview_context, st.session_state.assistant_history, user_message.strip())
+            st.session_state.assistant_history.append({"speaker": "Assistant", "text": answer})
+            st.rerun()
+    with practice_col:
+        st.markdown("#### Question practice and skill ranking")
+        questions = bank.get("questions", [])
+        for index, item in enumerate(questions):
+            question = item.get("question", "") if isinstance(item, dict) else str(item)
+            label = f"{index + 1}. [{item.get('topic', 'Interview')}] {question}" if isinstance(item, dict) else f"{index + 1}. {question}"
+            with st.expander(label, expanded=index == 0):
+                if isinstance(item, dict):
+                    st.caption(f"Difficulty: {item.get('difficulty', 'Intermediate')} · Ideal points: {', '.join(item.get('ideal_points', []))}")
+                answer_key = f"universal_answer_{index}"
+                answer = st.text_area("Your answer", key=answer_key, height=120, placeholder="Answer with a real example. For behavioral questions use STAR; for technical questions explain assumptions, approach, and trade-offs.")
+                if st.button("Evaluate answer", key=f"evaluate_universal_{index}"):
+                    if not answer.strip():
+                        st.warning("Write an answer first.")
+                    else:
+                        with st.spinner("Scoring your answer..."):
+                            st.session_state.answer_evaluations[index] = engine.evaluate_interview_answer(st.session_state.interview_role, question, answer, bank.get("skill_rubric", []))
+                result = st.session_state.answer_evaluations.get(index)
+                if result:
+                    st.metric("Answer score", f"{float(result.get('score', 0)):.1f}/10")
+                    st.write("**Strengths:** " + " ".join(result.get("strengths", [])))
+                    st.write("**Improve:** " + " ".join(result.get("improvements", [])))
+                    st.write("**Model outline:** " + " → ".join(result.get("model_answer_outline", [])))
+                    st.write("**Follow-up:** " + result.get("follow_up", "Add a measurable result."))
+    if st.session_state.answer_evaluations:
+        st.markdown("#### Your demonstrated skill rank")
+        rank_scores = {}
+        for result in st.session_state.answer_evaluations.values():
+            for skill, score in result.get("skill_scores", {}).items():
+                rank_scores.setdefault(skill, []).append(float(score))
+        ranked = sorted(((skill, sum(values) / len(values)) for skill, values in rank_scores.items()), key=lambda row: row[1], reverse=True)
+        if ranked:
+            rank_df = pd.DataFrame(ranked, columns=["Skill", "Score"])
+            st.plotly_chart(px.bar(rank_df, x="Score", y="Skill", orientation="h", range_x=[0, 10], template="plotly_dark", color="Score", color_continuous_scale="Teal"), use_container_width=True)
+            st.dataframe(rank_df, use_container_width=True, hide_index=True)
+    coding_practice_links(bank.get("coding_focus", []))
+
+
 def practice_room(engine: AIEngine) -> None:
     if not st.session_state.scenario:
         scenario_form()
@@ -238,7 +342,7 @@ def main() -> None:
     with st.sidebar:
         st.markdown("## `careercoach_ai`")
         st.caption("Voice-driven negotiation practice")
-        pages = ["Practice room", "Role-fit practice", "Results dashboard"]
+        pages = ["Practice room", "Interview workspace", "Role-fit practice", "Results dashboard"]
         st.session_state.page = st.radio("Navigate", pages, index=pages.index(st.session_state.page) if st.session_state.page in pages else 0)
         st.divider()
         st.markdown("**Engine status**")
@@ -248,6 +352,8 @@ def main() -> None:
     st.write("")
     if st.session_state.page == "Practice room":
         practice_room(engine)
+    elif st.session_state.page == "Interview workspace":
+        interview_workspace(engine)
     elif st.session_state.page == "Role-fit practice":
         role_fit_practice(engine)
     else:
