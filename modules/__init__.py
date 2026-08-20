@@ -1,0 +1,1 @@
+"""CareerCoach AI application modules."""
