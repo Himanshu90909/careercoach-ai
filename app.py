@@ -8,6 +8,7 @@ import plotly.express as px
 import streamlit as st
 
 from modules.ai_engine import AIEngine
+from modules.document_parser import compact_text, extract_uploaded_text, file_label
 from modules.report_generator import build_report
 from modules.scoring import DIMENSIONS, best_and_worst, improvement_delta, normalize_scores, weighted_overall
 
@@ -39,6 +40,10 @@ def init_state() -> None:
         "last_ai_response": "",
         "evaluation": None,
         "page": "Practice room",
+        "match_context": None,
+        "match_resume_name": "",
+        "match_job_name": "",
+        "practice_feedback": {},
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -74,6 +79,76 @@ def scenario_form() -> None:
         st.session_state.evaluation = None
         st.session_state.last_ai_response = "I am ready. Make your opening case for your target amount."
         st.rerun()
+
+
+def role_fit_practice(engine: AIEngine) -> None:
+    st.subheader("Resume-to-role practice")
+    st.caption("Upload your resume and the internship description. CareerCoach will identify the match, surface gaps, and turn them into practice questions.")
+    upload_left, upload_right = st.columns(2)
+    with upload_left:
+        resume_file = st.file_uploader("Upload resume", type=["pdf", "docx", "txt", "md", "csv"], key="resume_upload")
+    with upload_right:
+        job_file = st.file_uploader("Upload internship description", type=["pdf", "docx", "txt", "md", "csv"], key="job_upload")
+    if resume_file and job_file and st.button("Analyze role fit", type="primary", use_container_width=True):
+        try:
+            resume_text = compact_text(extract_uploaded_text(resume_file))
+            job_text = compact_text(extract_uploaded_text(job_file))
+            if not resume_text or not job_text:
+                st.error("Both files need readable text. Try a text-based PDF, DOCX, or TXT file.")
+            else:
+                with st.spinner("Comparing your resume with the internship requirements..."):
+                    st.session_state.match_context = engine.match_resume_to_role(resume_text, job_text)
+                st.session_state.match_resume_name = file_label(resume_file)
+                st.session_state.match_job_name = file_label(job_file)
+                st.session_state.practice_feedback = {}
+                st.rerun()
+        except ValueError as exc:
+            st.error(str(exc))
+    elif not (resume_file and job_file):
+        st.info("Upload both documents to unlock personalized practice. Your files are read in memory for this session and are not stored by this app.")
+
+    context = st.session_state.match_context
+    if not context:
+        return
+    st.divider()
+    st.markdown(f"**Resume:** `{st.session_state.match_resume_name}` &nbsp; · &nbsp; **Role description:** `{st.session_state.match_job_name}`")
+    metric_a, metric_b, metric_c = st.columns(3)
+    metric_a.metric("Role match", f"{context.get('match_score', 0)}/100")
+    metric_b.metric("Matched skills", len(context.get("matched_skills", [])))
+    metric_c.metric("Priority gaps", len(context.get("missing_skills", [])))
+    st.write(context.get("role_summary", "Your personalized role-fit analysis is ready."))
+    matched_col, gap_col = st.columns(2)
+    with matched_col:
+        st.markdown("#### Your evidence and matched skills")
+        for item in context.get("matched_skills", []):
+            st.write(f"✓ {item}")
+        for item in context.get("evidence", []):
+            st.caption(item)
+    with gap_col:
+        st.markdown("#### Skills to strengthen")
+        for item in context.get("missing_skills", []):
+            st.write(f"→ {item}")
+    st.markdown("#### Practice questions")
+    questions = context.get("questions", [])
+    for index, item in enumerate(questions):
+        question = item.get("question", "") if isinstance(item, dict) else str(item)
+        with st.expander(f"{index + 1}. {question}", expanded=index == 0):
+            if isinstance(item, dict):
+                st.caption(item.get("why_it_matters", "Role-relevant question"))
+                st.write("**Ideal points:** " + ", ".join(item.get("ideal_points", [])))
+            answer_key = f"answer_{index}"
+            answer = st.text_area("Your answer", key=answer_key, height=130, placeholder="Use Situation → Task → Action → Result. Include your own contribution.")
+            if st.button("Get coaching feedback", key=f"coach_{index}"):
+                if not answer.strip():
+                    st.warning("Write an answer first so the coach can review it.")
+                else:
+                    with st.spinner("Reviewing your answer..."):
+                        st.session_state.practice_feedback[index] = engine.coach_answer(context, question, answer)
+            if index in st.session_state.practice_feedback:
+                st.markdown(st.session_state.practice_feedback[index])
+    with st.expander("Suggested preparation plan", expanded=False):
+        for item in context.get("study_plan", []):
+            st.write(f"• {item}")
 
 
 def practice_room(engine: AIEngine) -> None:
@@ -163,7 +238,8 @@ def main() -> None:
     with st.sidebar:
         st.markdown("## `careercoach_ai`")
         st.caption("Voice-driven negotiation practice")
-        st.session_state.page = st.radio("Navigate", ["Practice room", "Results dashboard"], index=0 if st.session_state.page == "Practice room" else 1)
+        pages = ["Practice room", "Role-fit practice", "Results dashboard"]
+        st.session_state.page = st.radio("Navigate", pages, index=pages.index(st.session_state.page) if st.session_state.page in pages else 0)
         st.divider()
         st.markdown("**Engine status**")
         st.success("Gemini connected") if engine.available else st.warning("Demo mode — add GEMINI_API_KEY for live AI")
@@ -172,6 +248,8 @@ def main() -> None:
     st.write("")
     if st.session_state.page == "Practice room":
         practice_room(engine)
+    elif st.session_state.page == "Role-fit practice":
+        role_fit_practice(engine)
     else:
         results_dashboard()
 

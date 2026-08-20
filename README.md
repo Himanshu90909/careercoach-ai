@@ -2,7 +2,7 @@
 
 > `careercoach_ai :: voice-driven salary negotiation simulator`
 
-CareerCoach AI is an internship and placement preparation tool built with Streamlit and Gemini. It simulates a demanding HR manager, lets a candidate practise a negotiation by text or microphone, and produces a scorecard with targeted coaching recommendations.
+CareerCoach AI is an internship and placement preparation tool built with Streamlit and Gemini. It simulates a demanding HR manager, lets a candidate practise a negotiation by text or microphone, and produces a scorecard with targeted coaching recommendations. The role-fit lab accepts a resume and internship description, compares them, and generates personalized interview questions and answer feedback.
 
 ## Why this project exists
 
@@ -10,7 +10,7 @@ Students often know their technical skills but have not rehearsed how to communi
 
 ## Features
 
-The application provides a scenario configuration form, role-specific HR prompts, session-state conversation memory, text and microphone input, structured six-dimension evaluation, interactive Plotly charts, and a downloadable Markdown coaching report. It also includes a deterministic demo mode, so the interface can be explored without an API key.
+The application provides a scenario configuration form, role-specific HR prompts, session-state conversation memory, text and microphone input, structured six-dimension evaluation, interactive Plotly charts, and a downloadable Markdown coaching report. The **Role-fit practice** page supports PDF, DOCX, TXT, Markdown, and CSV uploads, produces a match score, highlights matched and missing skills, and lets the candidate practise targeted questions with STAR-style coaching feedback. It also includes deterministic demo modes, so the interface can be explored without an API key.
 
 ## Architecture
 
@@ -19,6 +19,9 @@ flowchart TD
     UI[Streamlit UI] --> FORM[Scenario Form]
     FORM --> STATE[Session State]
     STATE --> INPUT[Text or Audio Input]
+    UPLOAD[Resume + Internship Description] --> PARSE[In-memory Document Parser]
+    PARSE --> MATCH[Gemini Role Match + Question Plan]
+    MATCH --> ROLEFIT[Role-fit Practice]
     INPUT --> PROMPT[Prompt Builder]
     PROMPT --> GEMINI[Gemini API]
     GEMINI --> TRANSCRIPT[Conversation History]
@@ -61,11 +64,12 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | Path | Responsibility |
 |---|---|
 | `app.py` | Streamlit UI, navigation, session state, charts, and interaction flow |
-| `modules/ai_engine.py` | Gemini client, structured parsing, and demo fallbacks |
-| `modules/prompts.py` | Dynamic system and evaluation prompts |
+| `modules/ai_engine.py` | Gemini client, structured parsing, role matching, coaching, and demo fallbacks |
+| `modules/prompts.py` | Dynamic negotiation, role-matching, and coaching prompts |
+| `modules/document_parser.py` | In-memory PDF, DOCX, TXT, Markdown, and CSV text extraction |
 | `modules/scoring.py` | Deterministic score normalisation and weighted scoring |
 | `modules/report_generator.py` | Downloadable Markdown report generation |
-| `tests/` | Unit tests for scoring and report behaviour |
+| `tests/` | Unit tests for scoring, parsing, and role matching |
 | `docs/architecture.md` | Technical design and data-flow explanation |
 
 ## Evaluation rubric coverage
@@ -73,8 +77,8 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | Requirement | Implementation |
 |---|---|
 | Streamlit forms and session state | Scenario setup uses `st.form`; active conversation is preserved in `st.session_state` |
-| Gemini integration | Role-specific HR and evaluation prompts with dynamic scenario context |
-| Multimodality | `st.audio_input` is included for voice practice, with a text fallback |
+| Gemini integration | Role-specific HR, evaluation, role-match, and answer-coaching prompts |
+| Multimodality | Resume and internship-document uploads plus `st.audio_input` voice practice with a text fallback |
 | Data visualisation | KPI cards, radar profile, horizontal scorecard, and transcript review |
 | Deployment | Streamlit Community Cloud-compatible requirements |
 | Open-source branding | Terminal-style title, architecture diagram, setup instructions, and documented modules |
