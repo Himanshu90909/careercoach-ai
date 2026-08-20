@@ -179,6 +179,7 @@ def interview_workspace(engine: AIEngine) -> None:
         description = st.text_area("Role / internship description", placeholder="Paste the job description, required skills, responsibilities, or simply describe the interview you want to practise.", height=150)
         topics = st.multiselect("Topics to practise", ["Behavioral", "Technical", "Projects", "Role fit", "Teamwork", "Learning", "Coding", "SQL", "System design", "Communication"], default=["Behavioral", "Technical", "Projects", "Role fit"])
         candidate_context = st.text_area("Optional candidate context", placeholder="Add your experience, projects, resume summary, or strengths. This helps tailor the questions.", height=100)
+        camera_snapshot = st.camera_input("Optional camera snapshot for visual practice", help="Capture a whiteboard, project sketch, or interview setup. The current demo records the input for the active session without persisting it.")
         generate = st.form_submit_button("Generate my interview practice plan", type="primary", use_container_width=True)
     if generate:
         if not role.strip() or not description.strip():
@@ -187,7 +188,8 @@ def interview_workspace(engine: AIEngine) -> None:
             with st.spinner("Building your personalized interview question bank..."):
                 st.session_state.interview_bank = engine.generate_interview_bank(role.strip(), compact_text(description), topics, compact_text(candidate_context))
             st.session_state.interview_role = role.strip()
-            st.session_state.interview_context = compact_text(description + " " + candidate_context)
+            camera_note = " A visual practice snapshot was provided." if camera_snapshot is not None else ""
+            st.session_state.interview_context = compact_text(description + " " + candidate_context + camera_note)
             st.session_state.assistant_history = []
             st.session_state.answer_evaluations = {}
             st.rerun()
@@ -251,7 +253,7 @@ def interview_workspace(engine: AIEngine) -> None:
         if ranked:
             rank_df = pd.DataFrame(ranked, columns=["Skill", "Score"])
             st.plotly_chart(px.bar(rank_df, x="Score", y="Skill", orientation="h", range_x=[0, 10], template="plotly_dark", color="Score", color_continuous_scale="Teal"), use_container_width=True)
-            st.dataframe(rank_df, use_container_width=True, hide_index=True)
+            st.data_editor(rank_df, use_container_width=True, hide_index=True, disabled=True, key="skill_rank_editor")
     coding_practice_links(bank.get("coding_focus", []))
 
 

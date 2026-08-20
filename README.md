@@ -1,6 +1,10 @@
 # CareerCoach AI
 
-> `careercoach_ai :: voice-driven salary negotiation simulator`
+> `careercoach_ai :: universal interview readiness lab`
+
+**Live app:** [CareerCoach AI on Streamlit Community Cloud](https://jgf2buajk339fxdmuofnnr.streamlit.app/)
+
+**GitHub:** [Himanshu90909/careercoach-ai](https://github.com/Himanshu90909/careercoach-ai)
 
 CareerCoach AI is a general interview-preparation workspace built with Streamlit and Gemini. It accepts any role or internship description as text, can compare a resume with the role, generates topic-wise interview questions, provides an AI interview assistant, evaluates written answers, ranks demonstrated skills, and links candidates to external coding-practice platforms.
 
@@ -75,7 +79,8 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | `modules/scoring.py` | Deterministic score normalisation and weighted scoring |
 | `modules/report_generator.py` | Downloadable Markdown report generation |
 | `tests/` | Unit tests for scoring, parsing, and role matching |
-| `docs/architecture.md` | Technical design and data-flow explanation |
+| `docs/architecture.md` | Technical design, data flow, API strategy, and deployment explanation |
+| `docs/capstone_rubric.md` | Official MirAI rubric mapping, demo sequence, and submission checklist |
 
 ## Evaluation rubric coverage
 
@@ -87,6 +92,19 @@ The project uses only Python packages declared in `requirements.txt` and does no
 | Data visualisation | KPI cards, radar profile, horizontal scorecards, answer scores, and demonstrated-skill ranking |
 | Deployment | Streamlit Community Cloud-compatible requirements |
 | Open-source branding | Terminal-style title, architecture diagram, setup instructions, and documented modules |
+
+## MirAI capstone evaluation mapping
+
+| Category | Max points | Repository evidence |
+|---|---:|---|
+| Technical implementation & architecture | 25 | Modular Python, `st.session_state`, `st.form`, Pandas pipelines, defensive AI parsing, deterministic fallbacks, and automated tests. |
+| AI integration & prompt engineering | 20 | Gemini system prompts, dynamic role context, structured JSON tasks, resume matching, assistant chat, `st.camera_input`, and `st.audio_input`. |
+| UI/UX & data visualization | 20 | Terminal-style dashboard, columns, expanders, KPI cards, Plotly charts, `st.data_editor`, uploads, and downloads. |
+| Deployment & cloud engineering | 15 | Streamlit Community Cloud deployment, public GitHub repository, and dependency-only `requirements.txt`. |
+| Open-source branding | 10 | Customized README, live link, setup instructions, architecture diagram, testing commands, and documented modules. |
+| System design & documentation | 10 | `docs/architecture.md` plus the Mermaid data-flow diagram and API/fallback strategy. |
+
+For the detailed evidence and final presentation sequence, see [`docs/capstone_rubric.md`](docs/capstone_rubric.md).
 
 ## Testing
 
